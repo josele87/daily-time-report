@@ -1,0 +1,19 @@
+# Slack → api.slack.com/apps → "Create New App" → "From a manifest" → paste this.
+# Needs a workspace that allows custom apps (an admin may have to approve the install).
+display_information:
+  name: Daily Time Report
+  description: Computes my daily start/end/lunch from my own Slack activity (timestamps only).
+oauth_config:
+  scopes:
+    user:
+      - search:read
+      - users:read
+      - users.profile:read
+      - channels:history
+      - groups:history
+      - im:history
+      - mpim:history
+settings:
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
