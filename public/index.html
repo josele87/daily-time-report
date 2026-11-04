@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily Time Report</title>
+<link rel="stylesheet" href="/style.css">
+<!--STATIC_DATA-->
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Daily Time Report</h1>
+      <p class="sub" id="sub"></p>
+    </div>
+    <div class="actions" id="actions">
+      <button class="btn ghost" id="b-theme" title="Toggle theme">Theme</button>
+      <button class="btn ghost" id="b-fmt" title="12h / 24h">12h</button>
+      <button class="btn ghost owner" id="b-settings">Settings</button>
+      <button class="btn ghost owner" id="b-refresh">Refresh now</button>
+      <button class="btn ghost owner" id="b-share">Copy share link</button>
+    </div>
+  </header>
+
+  <section class="toolbar">
+    <div class="presets" id="presets" role="group" aria-label="Range presets"></div>
+    <div class="range">
+      <input type="date" id="from" aria-label="From">
+      <span>to</span>
+      <input type="date" id="to" aria-label="To">
+      <label class="chk"><input type="checkbox" id="weekends"> Weekends</label>
+    </div>
+  </section>
+
+  <div id="error" class="error" hidden></div>
+  <section class="cards" id="cards"></section>
+
+  <section class="charts">
+    <figure><figcaption>Net hours per day</figcaption><div id="chart-hours"></div></figure>
+    <figure><figcaption>Tickets tested <span class="legend" id="legend"></span></figcaption><div id="chart-tested"></div></figure>
+  </section>
+
+  <section class="tablewrap">
+    <div class="tablebar">
+      <h2>Daily log</h2>
+      <div class="actions">
+        <button class="btn" id="b-copy">Copy as text</button>
+        <button class="btn" id="b-csv">Export CSV</button>
+      </div>
+    </div>
+    <div class="scroll"><table id="tbl"></table></div>
+    <p class="foot" id="foot"></p>
+  </section>
+</div>
+
+<dialog id="dlg">
+  <form method="dialog" id="settings-form">
+    <h3>Settings</h3>
+    <label>Time zone <input name="tz" placeholder="America/Mexico_City"></label>
+    <label>Tested: moved FROM (comma separated) <input name="qaFrom"></label>
+    <label>Tested: moved TO (comma separated) <input name="qaTo"></label>
+    <label>Assumed lunch when no gap (min) <input name="defaultLunchMin" type="number" min="0" max="180"></label>
+    <label>Minimum gap counted as lunch (min) <input name="minLunchMin" type="number" min="10" max="180"></label>
+    <label>Subtract quiet gaps as pauses after (min, 0 = off) <input name="pauseMin" type="number" min="0" max="300"></label>
+    <div class="dlgbtns"><button class="btn" value="cancel">Cancel</button><button class="btn primary" value="save">Save</button></div>
+  </form>
+</dialog>
+<div id="toast" class="toast" role="status"></div>
+<script src="/app.js"></script>
+</body>
+</html>
