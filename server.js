@@ -31,10 +31,13 @@ async function report(q, readOnly) {
     hit = { t: Date.now(), activity: await getActivity(from, to, cfg, store) };
     cache.set(key, hit);
   }
-  const rows = await buildReport(from, to, { cfg, store, showWeekends: q.get('weekends') === '1', activity: hit.activity });
+  // files mode: an ongoing day only runs up to the moment the data was extracted, not up to "now"
+  const bcfg = cfg.files && hit.activity.dataAsOf ? { ...cfg, now: hit.activity.dataAsOf } : cfg;
+  const rows = await buildReport(from, to, { cfg: bcfg, store, showWeekends: q.get('weekends') === '1', activity: hit.activity });
   return {
     from, to, rows,
-    cfg: { tz: cfg.tz, mock: cfg.mock, jiraBase: cfg.jira.baseUrl, readOnly, qa: cfg.qa, engine: { defaultLunchMin: cfg.engine.defaultLunchMin, minLunchMin: cfg.engine.minLunchMin, pauseMin: cfg.engine.pauseMin } },
+    dataAsOf: hit.activity.dataAsOf || null,
+    cfg: { tz: cfg.tz, mock: cfg.mock, real: !!cfg.files, files: !!cfg.files, jiraBase: cfg.jira.baseUrl, readOnly, qa: cfg.qa, engine: { defaultLunchMin: cfg.engine.defaultLunchMin, minLunchMin: cfg.engine.minLunchMin, pauseMin: cfg.engine.pauseMin } },
     // viewers of a share link get no override metadata beyond the "edited" badge
     ...(readOnly ? {} : { shareToken: store.data.shareToken }),
   };
@@ -102,9 +105,9 @@ const server = http.createServer(async (req, res) => {
 if (require.main === module) {
   const host = process.env.HOST || '127.0.0.1';
   server.listen(defaults.port, host, () => {
-    console.log(`Daily Time Report  http://${host}:${defaults.port}   (${defaults.mock ? 'MOCK data' : 'live Slack/Jira'})`);
+    console.log(`Daily Time Report  http://${host}:${defaults.port}   (${defaults.files ? 'FILES: real data from data/*.json' : defaults.mock ? 'MOCK data' : 'live Slack/Jira'})`);
     console.log(`Share link         http://${host}:${defaults.port}/share/${store.data.shareToken}`);
   });
-  if (!defaults.mock && defaults.slack.token && !process.env.SLACK_EVENTS_ONLY) startStatusPoller(store, defaults);
+  if (!defaults.mock && !defaults.files && defaults.slack.token && !process.env.SLACK_EVENTS_ONLY) startStatusPoller(store, defaults);
 }
 module.exports = { server, store };

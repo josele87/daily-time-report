@@ -64,3 +64,7 @@ test/                node:test suites
 - Set `TZ_NAME` to the time zone your Jira/Slack activity should be bucketed in (an IANA name such as `America/Denver`). Wrong zone = activity near midnight lands on the wrong day, and hours shift by the offset.
 - Statuses like `Failed QA/UAT` or `Ready for Release` are **not** counted as "tested" unless you add them to `QA_TO_STATUSES`.
 - Slack `search.messages` indexes messages, not reactions or edits; thread replies are included.
+
+## Files mode (real data without Slack/Jira tokens)
+
+Set `DATA_SOURCE=files` in `.env`. The server then reads `data/slack-real.json` and `data/jira-real.json` (git-ignored, timestamps/ticket data only) and `data/overrides.json` (optional manual corrections) instead of calling the Slack/Jira APIs. The **Update** button re-reads those files; to get *new* numbers, refresh the extracts (e.g. ask Claude, which pulls them through its Slack/Jira connectors). An ongoing day runs only up to the moment the data was extracted. Slack status history (Working / lunch / AFK) is not available in this mode.
