@@ -170,6 +170,32 @@ test('DST: wall-clock conversion is correct on both sides of spring-forward and 
   assert.equal(parts(r.start, ny).minutes, 540); assert.equal(parts(r.end, ny).minutes, 1080);
 });
 
+test('today is "in progress": end = now (not the last message) until the day is explicitly ended', () => {
+  const evs = day([12, 30], [13, 20]).filter((e) => parts(e.ts, cfg.tz).minutes <= 16 * 60 + 7); // last message 4:07 PM
+  const now = at(17, 25);
+  const r = computeDay(D, { events: evs }, { ...cfg, now });
+  assert.equal(r.inProgress, true); assert.equal(r.endSource, 'now'); assert.equal(r.end, now);
+  assert.ok(r.flags.includes('in-progress'));
+  assert.equal(r.netMinutes, (17 * 60 + 25) - 9 * 60 - 50); // counted up to now, minus the 50-min lunch
+});
+
+test('today: a cleared status after "Working…" ends the day at that moment', () => {
+  const S = (h, m, text) => ({ ts: at(h, m), type: 'status', text, emoji: '' });
+  const r = computeDay(D, { events: day(), statusEvents: [S(9, 0, 'Working for X'), S(17, 30, '')] }, { ...cfg, now: at(19, 0) });
+  assert.equal(r.inProgress, false); assert.equal(parts(r.end, cfg.tz).minutes, 17 * 60 + 30);
+});
+
+test('today before midday: no assumed lunch is subtracted yet', () => {
+  const evs = []; for (let t = 7 * 60; t <= 12 * 60 + 30; t += 10) evs.push(ev(Math.floor(t / 60), t % 60));
+  const r = computeDay(D, { events: evs }, { ...cfg, now: at(12, 40) });
+  assert.equal(r.pauses.length, 0);
+});
+
+test('past days are unaffected by "now"', () => {
+  const r = computeDay(D, { events: day() }, { ...cfg, now: at(10, 0, '2026-11-09') });
+  assert.equal(r.inProgress, false); assert.equal(parts(r.end, cfg.tz).minutes, 18 * 60);
+});
+
 test('manual override takes precedence and recomputes net hours', () => {
   const base = computeDay(D, { events: day() }, cfg);
   const r = applyOverride(base, { start: '08:30', end: '17:30', lunchMinutes: 45 }, cfg);
