@@ -49,7 +49,7 @@ async function load() {
       const res = await fetch(`${base}?from=${range.from}&to=${range.to}&weekends=${weekends ? 1 : 0}`);
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || res.status);
-      ROWS = j.rows; CFG = j.cfg; token = j.shareToken || null; updatedAt = Date.now();
+      ROWS = j.rows; CFG = j.cfg; token = j.shareToken || null; updatedAt = j.dataAsOf || Date.now();
     }
     render();
   } catch (e) { showErr('Could not load the report: ' + e.message); }
@@ -272,7 +272,11 @@ $('#b-update').addEventListener('click', async () => {
       else await copy(ask, 'This is a snapshot: request copied, paste it in the Claude chat to refresh');
     } else {
       if (!SHARE) await fetch('/api/sync', { method: 'POST' });
-      await load(); toast('Updated ' + T(updatedAt));
+      await load();
+      if (CFG.files) { // files mode: Update re-reads data/*.json; fresh numbers need fresh extracts
+        const age = Date.now() - updatedAt;
+        toast(age > 3600e3 ? 'Re-read data files, but they are ' + Math.round(age / 3600e3) + ' h old. Ask Claude: "update the time report data"' : 'Updated, data as of ' + T(updatedAt));
+      } else toast('Updated ' + T(updatedAt));
     }
   } finally { btn.disabled = false; btn.textContent = label; }
 });
