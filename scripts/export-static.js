@@ -19,7 +19,7 @@ const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i > -1 
   const store = createStore(path.join(require('os').tmpdir(), 'tr-export-' + process.pid));
   const rows = await buildReport(from, to, { cfg, store, showWeekends: false });
   const data = {
-    rows, from, to, today: to,
+    rows, from, to, today: to, generatedAt: Date.now(),
     cfg: { tz: cfg.tz, mock: !live, jiraBase: cfg.jira.baseUrl, readOnly: true, qa: cfg.qa, engine: { defaultLunchMin: cfg.engine.defaultLunchMin, minLunchMin: cfg.engine.minLunchMin, pauseMin: cfg.engine.pauseMin } },
   };
   const pub = path.join(__dirname, '..', 'public');

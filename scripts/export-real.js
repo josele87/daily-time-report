@@ -35,9 +35,29 @@ const tested = Object.entries(byKey).flatMap(([key, v]) => extractTested({ key, 
 
 (async () => {
   const store = createStore(path.join(require('os').tmpdir(), 'tr-real-' + process.pid));
-  const rows = await buildReport(from, to, { cfg, store, showWeekends: true, activity: { events, statusEvents: [], comments, tested, bugs } });
+  const activity = { events, statusEvents: [], comments, tested, bugs };
+  let rows = await buildReport(from, to, { cfg, store, showWeekends: true, activity });
+  // Manual corrections live in data/overrides.json (git-ignored):
+  //   { "days": { "2026-10-06": { "start": "08:45" } },
+  //     "rules": [{ "before": "2026-10-26", "weekdaysOnly": true, "startIfLaterThan": "09:00", "setStart": "08:45" }] }
+  // They are applied as per-day overrides, so affected rows are badged "edited" / "manual" and never pass as measured.
+  const ovFile = path.join(dir, 'overrides.json');
+  if (fs.existsSync(ovFile)) {
+    const ov = JSON.parse(fs.readFileSync(ovFile, 'utf8'));
+    for (const [d, o] of Object.entries(ov.days || {})) store.setOverride(d, o);
+    const toMin = (s) => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
+    for (const rule of ov.rules || []) {
+      for (const r of rows) {
+        if (r.date >= rule.before || (rule.weekdaysOnly && r.weekend) || r.start == null || store.data.overrides[r.date]) continue;
+        if (parts(r.start, tz).minutes > toMin(rule.startIfLaterThan)) store.setOverride(r.date, { start: rule.setStart });
+      }
+    }
+    rows = await buildReport(from, to, { cfg, store, showWeekends: true, activity });
+    const edited = rows.filter((r) => r.edited);
+    console.log(`overrides applied to ${edited.length} day(s): ${edited.map((r) => r.date.slice(5)).join(', ')}`);
+  }
   const data = {
-    rows, from, to, today: to,
+    rows, from, to, today: to, generatedAt: Date.now(),
     cfg: { tz, mock: false, real: true, jiraBase: cfg.jira.baseUrl, readOnly: true, qa: cfg.qa, engine: { defaultLunchMin: cfg.engine.defaultLunchMin, minLunchMin: cfg.engine.minLunchMin, pauseMin: cfg.engine.pauseMin } },
   };
   const pub = path.join(__dirname, '..', 'public');
