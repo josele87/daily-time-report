@@ -203,3 +203,18 @@ test('manual override takes precedence and recomputes net hours', () => {
   assert.equal(r.netMinutes, 9 * 60 - 45);
   assert.ok(r.edited.includes('start'));
 });
+
+// ---- files data source ----
+test('files source: overrides.json rule moves late starts to 08:45 (in memory only)', async () => {
+  const fs = require('fs'), os = require('os'), path = require('path');
+  const { ruleOverrides } = require('../lib/files');
+  const real = path.join(__dirname, '..', 'data', 'overrides.json');
+  if (!fs.existsSync(real)) return; // data/ is git-ignored; nothing to check in a clean clone
+  const cfg = { tz: 'America/Bogota' };
+  const late = Date.parse('2026-10-06T09:30:00-05:00'), early = Date.parse('2026-10-07T08:40:00-05:00');
+  const rows = [{ date: '2026-10-06', weekend: false, start: late }, { date: '2026-10-07', weekend: false, start: early }, { date: '2026-10-27', weekend: false, start: late }];
+  const out = ruleOverrides(rows, cfg);
+  assert.deepEqual(out['2026-10-06'], { start: '08:45' });
+  assert.equal(out['2026-10-07'], undefined);
+  assert.equal(out['2026-10-27'], undefined);
+});
