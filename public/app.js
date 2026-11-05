@@ -10,9 +10,10 @@ const READONLY = !!(STATIC || SHARE);
 if (READONLY) document.body.classList.add('readonly');
 
 let CFG = STATIC ? STATIC.cfg : { tz: 'America/Mexico_City', qa: { to: ['Ready for UAT', 'Done', "Won't Do"] } };
-let ROWS = [], range = { from: null, to: null }, preset = null, weekends = false, token = null;
+let ROWS = [], range = { from: null, to: null }, preset = null, weekends = true, token = null; // weekends shown only when they have activity
 const open = new Set();
 let h24 = ls.get('h24') === '1';
+let updatedAt = STATIC ? (STATIC.generatedAt || null) : null;   // when the numbers on screen were produced
 
 // ---------- date / time helpers ----------
 const pad = (n) => String(n).padStart(2, '0');
@@ -48,7 +49,7 @@ async function load() {
       const res = await fetch(`${base}?from=${range.from}&to=${range.to}&weekends=${weekends ? 1 : 0}`);
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || res.status);
-      ROWS = j.rows; CFG = j.cfg; token = j.shareToken || null;
+      ROWS = j.rows; CFG = j.cfg; token = j.shareToken || null; updatedAt = Date.now();
     }
     render();
   } catch (e) { showErr('Could not load the report: ' + e.message); }
@@ -69,7 +70,7 @@ function totals(rows) {
 function render() {
   const t = totals(ROWS);
   $('#sub').innerHTML = `${esc(CFG.tz)} · ${dlabel(range.from)} – ${dlabel(range.to)}` +
-    (CFG.mock ? ' <span class="badge mock">Sample data</span>' : '') + (CFG.real ? ' <span class="badge s-status">Real data · Slack + Jira</span>' : '') + (READONLY ? ' <span class="badge">Read-only</span>' : '');
+    (updatedAt ? ` · Updated ${T(updatedAt)}` : '') + (CFG.mock ? ' <span class="badge mock">Sample data</span>' : '') + (CFG.real ? ' <span class="badge s-status">Real data · Slack + Jira</span>' : '') + (READONLY ? ' <span class="badge">Read-only</span>' : '');
   $('#b-fmt').textContent = h24 ? '24h' : '12h';
   $('#presets').innerHTML = presets().map((p) => `<button class="btn ${p.id === preset ? 'on' : ''}" data-p="${p.id}">${esc(p.label)}</button>`).join('');
   $('#from').value = range.from; $('#to').value = range.to; $('#weekends').checked = weekends;
@@ -180,7 +181,8 @@ function table() {
     const isOpen = open.has(r.date), off = r.start == null;
     body += `<tr class="day ${isOpen ? 'open' : ''} ${off ? 'off' : ''}" data-date="${r.date}"><td><span class="chev">›</span></td>` +
       `<td>${dlabel(r.date)}${r.edited ? ' <span class="badge s-manual">edited</span>' : ''}${r.flags.includes('outlier-activity') ? ' <span class="badge warn" title="Activity outside the workday window was ignored">outlier</span>' : ''}</td>` +
-      `<td>${T(r.start)}</td><td>${lunchCell(r)}</td><td>${T(r.end)}</td><td class="n net">${off ? '—' : dur(r.netMinutes)}</td>` +
+      `<td>${T(r.start)}</td><td>${lunchCell(r)}</td><td>${r.inProgress ? `<span class="badge s-status" title="Still working. Net hours are counted up to ${T(r.end)}">ongoing</span>` : T(r.end)}</td>` +
+      `<td class="n net">${off ? '—' : dur(r.netMinutes)}${r.inProgress ? ` <span class="badge" title="As of ${T(r.end)}">so far</span>` : ''}</td>` +
       `<td class="n">${r.commentsCount}</td><td class="n">${r.testedCount}</td><td class="n">${r.bugsCount}</td><td>${srcBadge(r.source)}</td></tr>`;
     if (isOpen) body += `<tr class="detail"><td></td><td colspan="9">${detail(r)}</td></tr>`;
   }
@@ -223,7 +225,8 @@ function lineFor(r) {
   if (r.start == null && !r.testedCount && !r.bugsCount) return `${dlabel(r.date)} — no activity`;
   const lunch = r.pauses.find((p) => p.type === 'lunch'), extra = r.pauses.filter((p) => p.type !== 'lunch');
   const lt = lunch ? (lunch.start != null ? `lunch ${T(lunch.start)}-${T(lunch.end)}` : `lunch ${lunch.minutes}m${lunch.source === 'assumed' ? ' assumed' : ''}`) : 'no lunch';
-  let s = `${dlabel(r.date)} — ${T(r.start)} to ${T(r.end)} (${lt}${extra.length ? `, +${dur(sum(extra, (p) => p.minutes))} pause` : ''}) = ${dur(r.netMinutes)}`;
+  const endTxt = r.inProgress ? `now (still working, as of ${T(r.end)})` : T(r.end);
+  let s = `${dlabel(r.date)} — ${T(r.start)} to ${endTxt} (${lt}${extra.length ? `, +${dur(sum(extra, (p) => p.minutes))} pause` : ''}) = ${dur(r.netMinutes)}${r.inProgress ? ' so far' : ''}`;
   const by = outcomes().map((o) => [o, r.tested.filter((t) => t.outcome === o)]).filter(([, l]) => l.length);
   const keys = r.tested.slice(0, 4).map((t) => t.key).join(', ') + (r.tested.length > 4 ? '…' : '');
   s += ` | ${r.testedCount} ticket${r.testedCount === 1 ? '' : 's'} tested` + (by.length ? `: ${by.map(([o, l]) => `${l.length} ${o}`).join(', ')} (${keys})` : '');
@@ -240,7 +243,7 @@ function csv() {
   const rows = [['Date', 'Start', 'End', 'Lunch min', 'Other pause min', 'Net hours', 'Comments', 'Tested', ...oc, 'Bugs', 'Source']];
   for (const r of ROWS) {
     const lunch = sum(r.pauses.filter((p) => p.type === 'lunch'), (p) => p.minutes), other = sum(r.pauses.filter((p) => p.type !== 'lunch'), (p) => p.minutes);
-    rows.push([r.date, r.start ? hhmm(r.start) : '', r.end ? hhmm(r.end) : '', lunch, other, (r.netMinutes / 60).toFixed(2), r.commentsCount, r.testedCount, ...oc.map((o) => r.tested.filter((t) => t.outcome === o).length), r.bugsCount, r.source || '']);
+    rows.push([r.date, r.start ? hhmm(r.start) : '', r.inProgress ? 'ongoing' : (r.end ? hhmm(r.end) : ''), lunch, other, (r.netMinutes / 60).toFixed(2), r.commentsCount, r.testedCount, ...oc.map((o) => r.tested.filter((t) => t.outcome === o).length), r.bugsCount, r.source || '']);
   }
   const text = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
@@ -258,7 +261,21 @@ $('#b-theme').addEventListener('click', () => {
   const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   const next = cur === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = next; ls.set('theme', next);
 });
-$('#b-refresh').addEventListener('click', async () => { await fetch('/api/sync', { method: 'POST' }); await load(); toast('Refreshed'); });
+// Update: live app → re-pull Slack/Jira now. Snapshot (no server) → ask Claude to regenerate it.
+$('#b-update').addEventListener('click', async () => {
+  const btn = $('#b-update'), label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Updating…';
+  try {
+    if (STATIC) {
+      const ask = 'Update the time report with the latest Slack and Jira data';
+      if (typeof window.sendPrompt === 'function') { window.sendPrompt(ask); toast('Asked Claude to update the report'); }
+      else await copy(ask, 'This is a snapshot: request copied, paste it in the Claude chat to refresh');
+    } else {
+      if (!SHARE) await fetch('/api/sync', { method: 'POST' });
+      await load(); toast('Updated ' + T(updatedAt));
+    }
+  } finally { btn.disabled = false; btn.textContent = label; }
+});
 $('#b-share').addEventListener('click', () => token ? copy(`${location.origin}/share/${token}`, 'Share link copied') : toast('No share token'));
 $('#b-copy').addEventListener('click', () => copy(ROWS.map(lineFor).join('\n'), 'Summary copied'));
 $('#b-csv').addEventListener('click', csv);
